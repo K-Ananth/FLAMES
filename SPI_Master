@@ -1,0 +1,300 @@
+----------------------------------------------------------------------------------
+-- Company			:  INDUS TEQSITE PVT LTD			 
+-- Engineer			:  FPGA Team
+-- 
+-- Create Date		:  15:16:11 10/31/2016 
+-- Design Name		:  Onboard Computer for ISAC
+-- Module Name		:  SPI Master Interface - Behavioral 
+-- Project Name	    :  YIA2058_CUBESAT
+-- Target Devices	:  AGL_250
+-- Tool versions	:  Libero11v5
+-- Description		:  Standard SPI Interface(configurable)
+--
+----------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use ieee.std_logic_unsigned.all;
+
+
+entity spi_master_macro is
+	generic 
+	(
+		dw_sel_max 		: integer 	:= 32
+--		cpol			: std_logic := '0';				--- clock polarity
+--		cpha	 		: std_logic := '0';				--- clock phase	
+--		lsb_en			: std_logic := '0'			--- MSB-first - '0'; LSB-first = '1'
+	);
+	port(
+		CLOCK 		   : in std_logic;
+		RST 		   	: in std_logic;
+		SPI_EN 		   : in std_logic;
+		CPOL		   	: in std_logic;
+		CPHA	 	   	: in std_logic;
+		LSB_EN		   : in std_logic;
+		RD_WRn			: in std_logic;
+		SPI_SDI 	   	: in std_logic;
+		SPI_DATA	   	: in std_logic_vector(dw_sel_max downto 1);
+		SCLK_DIVBY4    : in std_logic_vector(7 downto 0);
+		IOBUF_CNT	   : in integer range 0 to dw_sel_max;
+		DW_SEL 		   : in integer range 0 to dw_sel_max;--CHANGED TO dw_sel_max FROM 31
+		SPI_CS_n 	   : out std_logic;
+		SPI_SCLK 	   : out std_logic;
+		SPI_SDO 	   	: out std_logic;
+		SPI_READ_DATA  : out std_logic_vector(dw_sel_max downto 1);
+		IOBUF_T 	   	: out std_logic;         -- used only for bidirectional SDIO 
+		SPI_END        : out std_logic;
+		SPI_BUSY 	   : out std_logic
+        );
+	
+end spi_master_macro;
+
+architecture Behavioral of spi_master_macro is
+	
+	signal cpol_i 			: std_logic;
+	signal cpha_i 	    	: std_logic;
+	signal lsb_en_i		: std_logic;
+	signal rd_wrn_buf		: std_logic;
+	signal sclk_cpol		: std_logic;
+	signal count_data 	: integer range 0 to dw_sel_max;
+	
+	signal cs_buf_n  		: std_logic;
+	signal data_swaped	: std_logic_vector (dw_sel_max downto 1);
+	signal data_buf		: std_logic_vector (dw_sel_max downto 1);
+	signal read_data  	: std_logic_vector (dw_sel_max downto 1);
+	signal data_out1   	: std_logic_vector (dw_sel_max downto 1) := (others => '0'); 
+	
+	signal sclk_divby2 	: std_logic_vector(8 downto 0);
+	signal tsclk_divby4 	: std_logic_vector(7 downto 0);
+	
+	type state is (idle, sclk_cycle1, sclk_cycle1_wait, sclk_cycle2, sclk_cycle2_wait, 
+                   assert_ready_wait, assert_ready);		
+	signal current_state, next_state : state;
+
+begin
+
+	lsb_en_i 	<= LSB_EN;
+	cpol_i 		<= CPOL;
+	cpha_i 		<= CPHA;
+	
+	--- Bit Reversal for spi write data when LSB First enabled	
+	process(CLOCK, SPI_DATA, lsb_en_i)
+	begin
+		if (rising_edge(CLOCK)) then
+            if(lsb_en_i = '0') then
+                data_swaped <= SPI_DATA;
+            else
+                for i in 1 to dw_sel_max loop
+                    if (i <= dw_sel)then
+                        data_swaped(i) <= SPI_DATA(dw_sel-i+1);
+                    end if;
+                end loop;
+            end if;
+		end if;
+	end process;
+	
+    --- Bit Reversal for spi read data when LSB First enabled	
+	process(CLOCK, lsb_en_i, data_out1)
+	begin
+		if (rising_edge(CLOCK)) then
+            if (lsb_en_i = '0') then
+                SPI_READ_DATA 	<= data_out1;
+            else
+                for i in 1 to dw_sel_max loop
+                    if (i <= dw_sel)then
+                        SPI_READ_DATA(i) <= data_out1(dw_sel-i+1);
+                    end if;
+                end loop;
+            end if;
+		end if;
+	end process;
+	
+
+	-- Clock Polarity Assignment
+	sclk_cpol <= '0' when cpol_i = '0' else '1';
+	SPI_CS_n  <= cs_buf_n;
+	
+	p1:process (clock, rst, cpha_i, sclk_cpol, dw_sel, RD_WRn)
+	begin
+		if (rst = '1') then	
+			cs_buf_n			<= '1';
+			SPI_SCLK			<= sclk_cpol;
+			data_buf	   	<= (others => '0');
+			SPI_SDO 			<= '0';
+			SPI_BUSY			<= '0';
+			rd_wrn_buf 	 	<= RD_WRn;
+			iobuf_t			<= '1';			--state changed by Anu
+			current_state 	<= idle;
+			count_data 		<= dw_sel;
+			SPI_END     	<= '0';
+			sclk_divby2		<= (others => '0');
+			read_data		<= (others => '0');
+			tsclk_divby4   <= (others => '0');
+			
+		elsif (rising_edge(clock)) then
+
+			current_state  <= next_state;
+
+			case next_state is
+
+				when idle =>				
+					cs_buf_n	 	 <= '1';
+					SPI_SCLK	    <= sclk_cpol;
+					data_buf	 	 <= data_swaped;
+					SPI_SDO	    <= '0';
+					SPI_BUSY	 	 <= '0';
+					rd_wrn_buf 	 <= RD_WRn;
+					iobuf_t	    <= '1';
+					SPI_END      <= '0';
+					count_data   <= dw_sel;
+					tsclk_divby4 <= SCLK_DIVBY4;
+					sclk_divby2	 <= (others => '0');
+									
+				when sclk_cycle1 => 
+					cs_buf_n 	 <= '0';						--- assert chip select low
+					SPI_SCLK 	 <= sclk_cpol;
+					SPI_BUSY	 	 <= '1';
+					sclk_divby2  <= sclk_divby2 + 1;
+
+					if (cpha_i = '0') then						-- Clock phase '0' condition check				
+						SPI_SDO  <= data_buf(dw_sel);
+						data_buf((dw_sel) downto 2)  <= data_buf((dw_sel-1) downto 1);
+                        data_buf(1)   <= data_buf(dw_sel);
+						if((count_data <= IOBUF_CNT) and rd_wrn_buf = '1')then        -- Enabling IO Buffer --CHANGED by ANU
+							iobuf_t <= '1';
+						else
+							iobuf_t <= '0';
+						end if;
+					else 
+						read_data((dw_sel) downto 2)  <= read_data((dw_sel-1) downto 1);
+                        read_data(1) <= SPI_SDI;
+					end if;
+					
+				when sclk_cycle1_wait =>
+					cs_buf_n 	<= '0';						
+					SPI_SCLK 	<= sclk_cpol;
+					SPI_BUSY		<= '1';
+					sclk_divby2 <= sclk_divby2 + 1;
+						
+				when sclk_cycle2 => 
+					cs_buf_n 	<= '0';
+					SPI_SCLK 	<= not sclk_cpol;
+					SPI_BUSY	   <= '1';
+					count_data 	<= count_data-1;
+					sclk_divby2 <= sclk_divby2 - 1;
+
+					if (cpha_i = '1') then						--- Clock phase '1' condition check
+						SPI_SDO 	<= data_buf(dw_sel);
+						data_buf((dw_sel) downto 2) <= data_buf((dw_sel-1) downto 1);
+                        data_buf(1) <= data_buf(dw_sel);
+						if((count_data <= IOBUF_CNT) and rd_wrn_buf = '1')then        -- Enabling IO Buffer --CHANGED by ANU
+							iobuf_t   <= '1';
+						else
+							iobuf_t   <= '0';
+						end if;	
+					else
+						read_data((dw_sel) downto 2) <= read_data((dw_sel - 1) downto 1);
+                        read_data(1) <= SPI_SDI;
+					end if;
+					
+				when sclk_cycle2_wait =>
+					cs_buf_n 	  <= '0';						
+					SPI_SCLK 	  <= not sclk_cpol;
+					SPI_BUSY	     <= '1';
+					sclk_divby2   <= sclk_divby2 - 1;
+					
+					
+				when assert_ready_wait	=>							
+					cs_buf_n 	  <= '0';
+					SPI_BUSY	  <= '1';
+					SPI_END       <= '0';
+					sclk_divby2   <= sclk_divby2 - 1;
+					
+                when assert_ready	=>				--- ready high
+					cs_buf_n 	  <= '0';
+					SPI_SCLK 	  <= sclk_cpol;
+					SPI_BUSY	  	  <= '1';
+					data_out1 	  <= read_data;
+					SPI_END       <= '1';
+					sclk_divby2   <= sclk_divby2 + 1;
+										
+				when others =>
+					cs_buf_n	     <= '1';
+					SPI_SCLK	     <= sclk_cpol;
+					data_buf	  	  <= data_swaped;
+					SPI_SDO	 	  <= '0';
+					SPI_BUSY	  	  <= '0';
+					iobuf_t		  <= '0';
+					count_data 	  <= dw_sel;
+					SPI_END       <= '0';
+					sclk_divby2   <= (others => '0');
+					tsclk_divby4  <= (others => '0');
+					
+			end case;		
+		end if;		
+	end process;
+					
+	p2: process (current_state, SPI_EN, cpha_i, count_data, sclk_divby2, tsclk_divby4)
+	begin
+
+		next_state <= current_state;
+
+		case current_state is
+			
+			when idle =>										
+				if (SPI_EN = '1') then	
+                    next_state	<=  sclk_cycle1;
+				else
+					next_state	<=	idle;
+				end if;
+							
+			when sclk_cycle1	=>								
+				if (cpha_i = '1' and count_data = 0) then
+					next_state	<= assert_ready_wait;
+				else 
+					next_state  <= sclk_cycle1_wait;
+				end if;
+				
+			when sclk_cycle1_wait =>
+				if (sclk_divby2(8 downto 1) >= tsclk_divby4) then
+					next_state <= sclk_cycle2;
+				else
+					next_state	<= sclk_cycle1_wait;				
+				end if;
+					
+			when sclk_cycle2	=>									
+				if (cpha_i = '0' and count_data = 0) then
+					next_state	<= assert_ready_wait;
+				else
+					next_state  <= sclk_cycle2_wait;
+				end if;
+				
+			when sclk_cycle2_wait =>
+				if (sclk_divby2 = 0 ) then
+					next_state	<= sclk_cycle1;	
+				else
+					next_state	<= sclk_cycle2_wait;
+				end if;		
+			
+			when assert_ready_wait	=> 
+				if (sclk_divby2 = 0) then
+					next_state	<= assert_ready;
+				else
+					next_state  <= assert_ready_wait;
+				end if;
+				
+			when assert_ready =>
+				if (sclk_divby2(8 downto 1) >= tsclk_divby4) then
+					next_state	<= idle;
+				else
+					next_state	<= assert_ready;
+				end if;
+			
+			when others =>
+				next_state	<= idle;
+			
+		end case;
+	end process;
+			
+end Behavioral;
