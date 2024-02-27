@@ -1,0 +1,95 @@
+----------------------------------------------------------------------------------
+-- Company: 
+-- Engineer: 
+-- 
+-- Create Date: 02/26/2024 05:03:07 PM
+-- Design Name: 
+-- Module Name: azi_ele_code - Behavioral
+-- Project Name: 
+-- Target Devices: 
+-- Tool Versions: 
+-- Description: 
+-- 
+-- Dependencies: 
+-- 
+-- Revision:
+-- Revision 0.01 - File Created
+-- Additional Comments:
+-- 
+----------------------------------------------------------------------------------
+
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+--use ieee.std_logic_arith.all;
+use ieee.std_logic_unsigned.all;
+-- Uncomment the following library declaration if using
+-- arithmetic functions with Signed or Unsigned values
+use IEEE.NUMERIC_STD.ALL;
+
+-- Uncomment the following library declaration if instantiating
+-- any Xilinx leaf cells in this code.
+--library UNISIM;
+--use UNISIM.VComponents.all;
+
+entity azimuthal_elevation is
+generic( a        : std_logic_vector(1 downto 0) := "10";
+        dx        : std_logic_vector(1 downto 0) := "01";
+        dy        : std_logic_vector(1 downto 0) := "10"; 
+        m         : std_logic_vector(1 downto 0) := "10";
+        n         : std_logic_vector(1 downto 0) := "10";
+        del_pi    : std_logic_vector(1 downto 0) := "11"
+        );
+   
+  Port (clk       : in std_logic;  
+        frequency : in std_logic_vector(40 downto 0);
+        azimuthal : in std_logic_vector(43 downto 0);
+        elevation : in std_logic_vector(43 downto 0);
+        pie_ct    : out std_logic_vector(294 downto 0)
+        );
+end azimuthal_elevation;
+
+
+architecture Behavioral of azimuthal_elevation is
+
+signal eqn1       : std_logic_vector(292 downto 0);
+signal eqn2       : std_logic_vector(248 downto 0);
+signal pi         : real  := 3.14159;
+signal C          : real  := 0.000000003333;
+--signal temp_pi    : unsigned(31 downto 0);
+--signal temp_C     : unsigned(63 downto 0);
+signal temp_pi    : signed(31 downto 0);
+signal temp_C     : signed(127 downto 0);
+signal pi_out     : std_logic_vector(31 downto 0);
+signal C_out      : std_logic_vector(127 downto 0);
+
+signal first_term : std_logic_vector(202 downto 0); 
+
+begin
+process(clk)
+begin
+if(rising_edge(clk)) then
+
+--temp_pi <= to_unsigned(natural(pi),32);
+--temp_C  <= to_unsigned(natural(C),64);
+
+temp_pi <= to_signed(integer(pi),32);
+temp_C  <= to_signed(integer(C),128);
+
+
+--pi_out <= std_logic_vector(temp_pi(31 downto 0));
+--C_out  <= std_logic_vector(temp_C(63 downto 0));
+
+pi_out <= std_logic_vector(temp_pi(31 downto 0));
+C_out  <= std_logic_vector(temp_C(127 downto 0));
+
+
+first_term <= (a * pi_out * frequency * C_out);
+  
+eqn1 <= (first_term * dx * azimuthal * elevation);
+eqn2 <= (first_term * dy * elevation);
+pie_ct <= (( m * eqn1) + (n * eqn2) + del_pi);
+
+end if;
+end process;
+end Behavioral;
