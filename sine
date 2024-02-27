@@ -1,0 +1,108 @@
+----------------------------------------------------------------------------------
+-- Company: 
+-- Engineer: 
+-- 
+-- Create Date: 02/26/2024 05:47:09 PM
+-- Design Name: 
+-- Module Name: sine - Behavioral
+-- Project Name: 
+-- Target Devices: 
+-- Tool Versions: 
+-- Description: 
+-- 
+-- Dependencies: 
+-- 
+-- Revision:
+-- Revision 0.01 - File Created
+-- Additional Comments:
+-- 
+----------------------------------------------------------------------------------
+
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Uncomment the following library declaration if using
+-- arithmetic functions with Signed or Unsigned values
+use IEEE.NUMERIC_STD.ALL;
+
+-- Uncomment the following library declaration if instantiating
+-- any Xilinx leaf cells in this code.
+--library UNISIM;
+--use UNISIM.VComponents.all
+entity sine is 
+generic( table_size : integer := 358 );
+
+Port (clk : in std_logic;
+angle : in signed(table_size-1 downto 0);
+--sine : out signed(11 downto 0)
+sine_out : out std_logic_vector(43 downto 0)
+ );
+end sine;
+
+architecture Behavioral of sine is
+signal s_angle : integer := 0;
+signal sine    : signed(43 downto 0);
+type sin_table  is array ( 0 to table_size-1) of signed (43 downto 0);
+constant lut : sin_table := (x"00000000000", x"00000000001", x"00000000003", x"00000000005", x"00000000006", x"00000000008", x"0000000000A",
+                             x"0000000000C", x"0000000000D", x"0000000000F", x"00000000011", x"00000000013", x"00000000014", x"00000000016",
+                             x"00000000018", x"00000000019", x"0000000001B", x"0000000001D", x"0000000001E", x"00000000020", x"00000000022",
+                             x"00000000023", x"00000000025", x"00000000027", x"00000000028", x"0000000002A", x"0000000002B", x"0000000002D",
+                             x"0000000002E", x"00000000030", x"00000000032", x"00000000033", x"00000000034", x"00000000036", x"00000000037",
+                             x"00000000039", x"0000000003A", x"0000000003C", x"0000000003D", x"0000000003E", x"00000000040", x"00000000041",
+                             x"00000000042", x"00000000044", x"00000000045", x"00000000046", x"00000000047", x"00000000049", x"0000000004A",
+                             x"0000000004B", x"0000000004C", x"0000000004D", x"0000000004E", x"0000000004F", x"00000000050", x"00000000051",
+                             x"00000000052", x"00000000053", x"00000000054", x"00000000055", x"00000000056", x"00000000057", x"00000000058",
+                             x"00000000059", x"00000000059", x"0000000005A", x"0000000005B", x"0000000005C", x"0000000005C", x"0000000005D",
+                             x"0000000005D", x"0000000005E", x"0000000005F", x"0000000005F", x"00000000060", x"00000000060", x"00000000061",
+                             x"00000000061", x"00000000061", x"00000000062", x"00000000062", x"00000000062", x"00000000063", x"00000000063",
+                             x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"10000000000",
+                             x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"00000000063", x"00000000063",
+                             x"00000000063", x"00000000062", x"00000000062", x"00000000062", x"00000000061", x"00000000061", x"00000000061",
+                             x"00000000060", x"00000000060", x"0000000005F", x"0000000005F", x"0000000005E", x"0000000005D", x"0000000005D",
+                             x"0000000005C", x"0000000005C", x"0000000005B", x"0000000005A", x"00000000059", x"00000000059", x"00000000058",
+                             x"00000000057", x"00000000056", x"00000000055", x"00000000054", x"00000000053", x"00000000052", x"00000000051",
+                             x"00000000050", x"0000000004F", x"0000000004E", x"0000000004D", x"0000000004C", x"0000000004B", x"0000000004A",
+                             x"00000000049", x"00000000047", x"00000000046", x"00000000045", x"00000000044", x"00000000042", x"00000000041",
+                             x"00000000040", x"0000000003E", x"0000000003D", x"0000000003C", x"0000000003A", x"00000000039", x"00000000037",
+                             x"00000000036", x"00000000034", x"00000000033", x"00000000032", x"00000000030", x"0000000002E", x"0000000002D",
+                             x"0000000002B", x"0000000002A", x"00000000028", x"00000000027", x"00000000025", x"00000000023", x"00000000022",
+                             x"00000000020", x"0000000001E", x"0000000001D", x"0000000001B", x"00000000019", x"00000000018", x"00000000016",
+                             x"00000000014", x"00000000013", x"00000000011", x"0000000000F", x"0000000000D", x"0000000000C", x"0000000000A",
+                             x"00000000008", x"00000000006", x"00000000005", x"00000000003", x"00000000001", x"00000000000", x"0FFFFFFFFFF",
+                             x"0FFFFFFFFFD", x"0FFFFFFFFFB", x"0FFFFFFFFFA", x"0FFFFFFFFF8", x"0FFFFFFFFF6", x"0FFFFFFFFF4", x"0FFFFFFFFF3",
+                             x"0FFFFFFFFF1", x"0FFFFFFFFEF", x"0FFFFFFFFED", x"0FFFFFFFFEC", x"0FFFFFFFFEA", x"0FFFFFFFFE8", x"0FFFFFFFFE7",
+                             x"0FFFFFFFFE5", x"0FFFFFFFFE3", x"0FFFFFFFFE2", x"0FFFFFFFFE0", x"0FFFFFFFFDE", x"0FFFFFFFFDD", x"0FFFFFFFFDB",
+                             x"0FFFFFFFFD9", x"0FFFFFFFFD8", x"0FFFFFFFFD6", x"0FFFFFFFFD5", x"0FFFFFFFFD3", x"0FFFFFFFFD2", x"0FFFFFFFFD0",
+                             x"0FFFFFFFFCE", x"0FFFFFFFFCD", x"0FFFFFFFFCC", x"0FFFFFFFFCA", x"0FFFFFFFFC9", x"0FFFFFFFFC7", x"0FFFFFFFFC6",
+                             x"0FFFFFFFFC4", x"0FFFFFFFFC3", x"0FFFFFFFFC2", x"0FFFFFFFFC0", x"0FFFFFFFFBF", x"0FFFFFFFFBE", x"0FFFFFFFFBC",
+                             x"0FFFFFFFFBB", x"0FFFFFFFFBA", x"0FFFFFFFFB9", x"0FFFFFFFFB7", x"0FFFFFFFFB6", x"0FFFFFFFFB5", x"0FFFFFFFFB4",
+                             x"0FFFFFFFFB3", x"0FFFFFFFFB2", x"0FFFFFFFFB1", x"0FFFFFFFFB0", x"0FFFFFFFFAF", x"0FFFFFFFFAE", x"0FFFFFFFFAD",
+                             x"0FFFFFFFFAA", x"0FFFFFFFFA9", x"0FFFFFFFFA8", x"0FFFFFFFFA7", x"0FFFFFFFFA7", x"0FFFFFFFFA6", x"0FFFFFFFFA5",
+                             x"0FFFFFFFFA4", x"0FFFFFFFFA4", x"0FFFFFFFFA3", x"0FFFFFFFFA3", x"0FFFFFFFFA2", x"0FFFFFFFFA1", x"0FFFFFFFFA1",
+                            x"0FFFFFFFFA0",  x"0FFFFFFFFA0", x"0FFFFFFFF9F", x"0FFFFFFFF9F", x"0FFFFFFFF9F", x"0FFFFFFFF9E", x"0FFFFFFFF9E",
+                            x"0FFFFFFFF9E",  x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D",
+                            x"0FFFFFFFF9D",  x"0FFFFFFFF9D", x"F0000000000", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D",
+                            x"0FFFFFFFF9D",  x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9D", x"0FFFFFFFF9E", x"0FFFFFFFF9E", x"0FFFFFFFF9E",
+                            x"0FFFFFFFF9F",  x"0FFFFFFFF9F", x"0FFFFFFFF9F", x"0FFFFFFFFA0", x"0FFFFFFFFA0", x"0FFFFFFFFA1", x"0FFFFFFFFA1",
+                            x"0FFFFFFFFA2",  x"0FFFFFFFFA3", x"0FFFFFFFFA3", x"0FFFFFFFFA4", x"0FFFFFFFFA4", x"0FFFFFFFFA5", x"0FFFFFFFFA6",
+                            x"0FFFFFFFFA7",  x"0FFFFFFFFA7", x"0FFFFFFFFA8", x"0FFFFFFFFA9", x"0FFFFFFFFAA", x"0FFFFFFFFAB", x"0FFFFFFFFAC",
+                            x"0FFFFFFFFAD",  x"0FFFFFFFFAE", x"0FFFFFFFFAF", x"0FFFFFFFFB0", x"0FFFFFFFFB1", x"0FFFFFFFFB2", x"0FFFFFFFFB3",
+                           x"0FFFFFFFFB4",   x"0FFFFFFFFB5", x"0FFFFFFFFB6", x"0FFFFFFFFB7", x"0FFFFFFFFB9", x"0FFFFFFFFBA", x"0FFFFFFFFBB",
+                           x"0FFFFFFFFBC",   x"0FFFFFFFFBE", x"0FFFFFFFFBF", x"0FFFFFFFFC0", x"0FFFFFFFFC2", x"0FFFFFFFFC3", x"0FFFFFFFFC4",
+                           x"0FFFFFFFFC6",   x"0FFFFFFFFC7", x"0FFFFFFFFC9", x"0FFFFFFFFCA", x"0FFFFFFFFCC", x"0FFFFFFFFCD", x"0FFFFFFFFCE",
+                           x"0FFFFFFFFD0",   x"0FFFFFFFFD2", x"0FFFFFFFFD3", x"0FFFFFFFFD5", x"0FFFFFFFFD6", x"0FFFFFFFFD8", x"0FFFFFFFFD9",
+                           x"0FFFFFFFFDB",   x"0FFFFFFFFDD", x"0FFFFFFFFDE", x"0FFFFFFFFE0", x"0FFFFFFFFE2", x"0FFFFFFFFE3", x"0FFFFFFFFE5",
+                           x"0FFFFFFFFE7",   x"0FFFFFFFFE8", x"0FFFFFFFFEA", x"0FFFFFFFFEC", x"0FFFFFFFFED", x"0FFFFFFFFEF", x"0FFFFFFFFF1",
+                           x"0FFFFFFFFF3",   x"0FFFFFFFFF4", x"0FFFFFFFFF6", x"0FFFFFFFFF8", x"0FFFFFFFFFA", x"0FFFFFFFFFB", x"0FFFFFFFFFD",
+                           x"0FFFFFFFFFF");
+begin
+process(clk)
+begin
+if(rising_edge(clk)) then
+s_angle <= to_integer(angle);
+sine <= lut(s_angle);
+end if;
+end process;
+sine_out <= std_logic_vector(sine);
+end Behavioral;
