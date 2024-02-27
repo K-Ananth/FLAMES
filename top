@@ -1,0 +1,97 @@
+----------------------------------------------------------------------------------
+-- Company: 
+-- Engineer: 
+-- 
+-- Create Date: 02/27/2024 05:05:11 PM
+-- Design Name: 
+-- Module Name: top_azi_elevation - Behavioral
+-- Project Name: 
+-- Target Devices: 
+-- Tool Versions: 
+-- Description: 
+-- 
+-- Dependencies: 
+-- 
+-- Revision:
+-- Revision 0.01 - File Created
+-- Additional Comments:
+-- 
+----------------------------------------------------------------------------------
+
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Uncomment the following library declaration if using
+-- arithmetic functions with Signed or Unsigned values
+use IEEE.NUMERIC_STD.ALL;
+
+-- Uncomment the following library declaration if instantiating
+-- any Xilinx leaf cells in this code.
+--library UNISIM;
+--use UNISIM.VComponents.all;
+
+entity top_azi_elevation is
+generic( a        : std_logic_vector(1 downto 0) := "10"; 
+        dx        : std_logic_vector(1 downto 0) := "01"; 
+        dy        : std_logic_vector(1 downto 0) := "10"; 
+        m         : std_logic_vector(1 downto 0) := "10"; 
+        n         : std_logic_vector(1 downto 0) := "10"; 
+        del_pi    : std_logic_vector(1 downto 0) := "11";   
+        table_size : integer := 358 
+        );
+ Port( clk                  : in std_logic;                    
+       frequency            : in std_logic_vector(40 downto 0); 
+       azimuthual_angle     : in signed(table_size-1 downto 0);
+       elevation_angle      : in signed(table_size-1 downto 0);
+       pie_ct               : out std_logic_vector(294 downto 0)
+       );
+end top_azi_elevation;
+
+architecture Behavioral of top_azi_elevation is
+
+signal sine_azimuthal : std_logic_vector(43 downto 0);
+signal sine_elevation : std_logic_vector(43 downto 0);
+signal pie_ct_s       : std_logic_vector(294 downto 0);
+--signal sine_out  : std_logic_vector(43 downto 0);
+
+component azimuthal_elevation is
+
+  Port (clk       : in std_logic;  
+        frequency : in std_logic_vector(40 downto 0);
+        azimuthal : in std_logic_vector(43 downto 0);
+        elevation : in std_logic_vector(43 downto 0);
+        pie_ct    : out std_logic_vector(294 downto 0)
+        );
+end component;
+
+component sine is 
+
+Port (clk : in std_logic;
+      angle : in signed(table_size-1 downto 0);
+--sine : out signed(11 downto 0) 
+     sine_out : out std_logic_vector(43 downto 0)
+ );
+end component;
+
+
+begin
+
+sin_azimuthal : sine port map(clk      => clk,
+                              angle    => azimuthual_angle,
+                              sine_out => sine_azimuthal
+                              );
+                    
+sin_elevation : sine port map(clk      => clk,
+                              angle    => elevation_angle,
+                              sine_out => sine_elevation
+                              );
+azimuthal_elevation_inst : azimuthal_elevation port map(clk       => clk,      
+                                                        frequency => frequency,
+                                                        azimuthal => sine_azimuthal,
+                                                        elevation => sine_elevation,
+                                                        pie_ct    => pie_ct_s
+                                                        );   
+ pie_ct <= pie_ct_s;
+
+end Behavioral;
